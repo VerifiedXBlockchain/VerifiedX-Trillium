@@ -4,15 +4,15 @@
 [![Generic badge](https://img.shields.io/badge/C%23-10%2E0-blue.svg)](https://shields.io/)
 [![Generic badge](https://img.shields.io/badge/%2ENet%20Core-6%2E0-blue.svg)](https://shields.io/)
 
-![license](https://img.shields.io/github/license/ReserveBlockIO/Trillium)
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/ReserveBlockIO/Trillium/dotnet.yml)
-![issues](https://img.shields.io/github/issues/ReserveBlockIO/Trillium)
+![license](https://img.shields.io/github/license/VerifiedXBlockchain/VerifiedX-Trillium)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/VerifiedXBlockchain/VerifiedX-Trillium/dotnet.yml)
+![issues](https://img.shields.io/github/issues/VerifiedXBlockchain/VerifiedX-Trillium)
 ![Discord](https://img.shields.io/discord/917499597692211260?label=discord)
 
-![GitHub commit activity](https://img.shields.io/github/commit-activity/m/ReserveBlockIO/Trillium)
-![GitHub last commit](https://img.shields.io/github/last-commit/ReserveBlockIO/Trillium)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/m/VerifiedXBlockchain/VerifiedX-Trillium)
+![GitHub last commit](https://img.shields.io/github/last-commit/VerifiedXBlockchain/VerifiedX-Trillium)
 
-![GitHub Release Date](https://img.shields.io/github/release-date/ReserveBlockIO/Trillium)
+![GitHub Release Date](https://img.shields.io/github/release-date/VerifiedXBlockchain/VerifiedX-Trillium)
 
 Trillium is the smart contract language that will be powering our smart contracts. This is a from scratch language that has roots from C#, C, and some Javascript.
 
