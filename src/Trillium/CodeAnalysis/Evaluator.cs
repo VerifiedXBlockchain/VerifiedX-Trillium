@@ -15,6 +15,8 @@ namespace Trillium.CodeAnalysis
         private Random _random;
 
         private object _lastValue;
+        private int _depth;
+        private long _calls;
 
         public Evaluator(BoundProgram program, Dictionary<VariableSymbol, object> variables)
         {
@@ -112,27 +114,35 @@ namespace Trillium.CodeAnalysis
             _lastValue = EvaluateExpression(node.Expression);
         }
 
+        // Every way the evaluator recurses passes through here (statements run flat; a call body is reached from its call
+        // expression), so this depth bounds its stack.
         private object EvaluateExpression(BoundExpression node)
         {
-            switch (node.Kind)
+            try
             {
-                case BoundNodeKind.LiteralExpression:
-                    return EvaluateLiteralExpression((BoundLiteralExpression)node);
-                case BoundNodeKind.VariableExpression:
-                    return EvaluateVariableExpression((BoundVariableExpression)node);
-                case BoundNodeKind.AssignmentExpression:
-                    return EvaluateAssignmentExpression((BoundAssignmentExpression)node);
-                case BoundNodeKind.UnaryExpression:
-                    return EvaluateUnaryExpression((BoundUnaryExpression)node);
-                case BoundNodeKind.BinaryExpression:
-                    return EvaluateBinaryExpression((BoundBinaryExpression)node);
-                case BoundNodeKind.CallExpression:
-                    return EvaluateCallExpression((BoundCallExpression)node);
-                case BoundNodeKind.ConversionExpression:
-                    return EvaluateConversionExpression((BoundConversionExpression)node);
-                default:
-                    throw new Exception($"Unexpected node {node.Kind}");
+                if (++_depth > EvaluationLimitException.MaxDepth)
+                    throw EvaluationLimitException.TooDeep();
+                switch (node.Kind)
+                {
+                    case BoundNodeKind.LiteralExpression:
+                        return EvaluateLiteralExpression((BoundLiteralExpression)node);
+                    case BoundNodeKind.VariableExpression:
+                        return EvaluateVariableExpression((BoundVariableExpression)node);
+                    case BoundNodeKind.AssignmentExpression:
+                        return EvaluateAssignmentExpression((BoundAssignmentExpression)node);
+                    case BoundNodeKind.UnaryExpression:
+                        return EvaluateUnaryExpression((BoundUnaryExpression)node);
+                    case BoundNodeKind.BinaryExpression:
+                        return EvaluateBinaryExpression((BoundBinaryExpression)node);
+                    case BoundNodeKind.CallExpression:
+                        return EvaluateCallExpression((BoundCallExpression)node);
+                    case BoundNodeKind.ConversionExpression:
+                        return EvaluateConversionExpression((BoundConversionExpression)node);
+                    default:
+                        throw new Exception($"Unexpected node {node.Kind}");
+                }
             }
+            finally { _depth--; }
         }
 
         private static object EvaluateLiteralExpression(BoundLiteralExpression n)
@@ -382,6 +392,8 @@ namespace Trillium.CodeAnalysis
             }
             else
             {
+                if (++_calls > EvaluationLimitException.MaxCalls)
+                    throw EvaluationLimitException.TooManyCalls();
                 var locals = new Dictionary<VariableSymbol, object>();
                 for (int i = 0; i < node.Arguments.Length; i++)
                 {
