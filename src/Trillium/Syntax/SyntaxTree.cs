@@ -27,6 +27,14 @@ namespace Trillium.Syntax
 
         public readonly bool PreventLoopsAndRecursion;
 
+        /// <summary>
+        /// How deep the parser nests statements and expressions. Past it the rest of the source is not read and the tree
+        /// carries <see cref="NestingTooDeepMessage"/>: deeper source would overflow the stack, which ends the process.
+        /// </summary>
+        public const int MaxNestingDepth = 256;
+
+        public const string NestingTooDeepMessage = "Code is nested more than 256 levels deep.";
+
         public static SyntaxTree Load(string fileName)
         {
             var text = File.ReadAllText(fileName);

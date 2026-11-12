@@ -12,6 +12,8 @@ namespace Trillium.Syntax
         private readonly SourceText _text;
         private readonly ImmutableArray<SyntaxToken> _tokens;
         private int _position;
+        private int _depth;
+        private bool _tooDeep;
 
         public Parser(SyntaxTree syntaxTree)
         {
@@ -63,6 +65,30 @@ namespace Trillium.Syntax
 
             _diagnostics.ReportUnexpectedToken(Current.Location, Current.Kind, kind);
             return new SyntaxToken(_syntaxTree, kind, Current.Position, null, null);
+        }
+
+        // Every recursion in the parser passes through ParseStatement, ParseAssignmentExpression or ParseBinaryExpression,
+        // so those three count the depth. Past SyntaxTree.MaxNestingDepth the source is refused once and the rest of it
+        // skipped (Current becomes the end of file), so the parse unwinds instead of overflowing the stack.
+        private T Nested<T>(Func<T> parse, Func<T> instead)
+        {
+            _depth++;
+            try
+            {
+                if (_depth <= SyntaxTree.MaxNestingDepth)
+                    return parse();
+                if (!_tooDeep)
+                {
+                    _tooDeep = true;
+                    _diagnostics.ReportNestingTooDeep(Current.Location);
+                    _position = _tokens.Length - 1;
+                }
+                return instead();
+            }
+            finally
+            {
+                _depth--;
+            }
         }
 
         public CompilationUnitSyntax ParseCompilationUnit()
@@ -159,7 +185,10 @@ namespace Trillium.Syntax
             return new GlobalStatementSyntax(_syntaxTree, statement);
         }
 
-        private StatementSyntax ParseStatement()
+        private StatementSyntax ParseStatement() =>
+            Nested(ParseStatementUnguarded, () => new ExpressionStatementSyntax(_syntaxTree, ParseNameExpression()));
+
+        private StatementSyntax ParseStatementUnguarded()
         {
             switch (Current.Kind)
             {
@@ -329,7 +358,10 @@ namespace Trillium.Syntax
             return ParseAssignmentExpression();
         }
 
-        private ExpressionSyntax ParseAssignmentExpression()
+        private ExpressionSyntax ParseAssignmentExpression() =>
+            Nested(ParseAssignmentExpressionUnguarded, ParseNameExpression);
+
+        private ExpressionSyntax ParseAssignmentExpressionUnguarded()
         {
             if (Peek(0).Kind == SyntaxKind.IdentifierToken &&
                 Peek(1).Kind == SyntaxKind.EqualsToken)
@@ -343,7 +375,10 @@ namespace Trillium.Syntax
             return ParseBinaryExpression();
         }
 
-        private ExpressionSyntax ParseBinaryExpression(int parentPrecedence = 0)
+        private ExpressionSyntax ParseBinaryExpression(int parentPrecedence = 0) =>
+            Nested(() => ParseBinaryExpressionUnguarded(parentPrecedence), ParseNameExpression);
+
+        private ExpressionSyntax ParseBinaryExpressionUnguarded(int parentPrecedence)
         {
             ExpressionSyntax left;
             var unaryOperatorPrecedence = Current.Kind.GetUnaryOperatorPrecedence();

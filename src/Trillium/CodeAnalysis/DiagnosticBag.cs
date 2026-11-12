@@ -178,6 +178,11 @@ namespace Trillium.CodeAnalysis
             Report(location, message);
         }
 
+        public void ReportNestingTooDeep(TextLocation location)
+        {
+            Report(location, SyntaxTree.NestingTooDeepMessage);
+        }
+
         public void ReportWhileLoop(TextLocation location)
         {
             var message = $"While loop was detected.";
