@@ -77,18 +77,21 @@ namespace Trillium.Syntax
             {
                 if (_depth <= SyntaxTree.MaxNestingDepth)
                     return parse();
-                if (!_tooDeep)
-                {
-                    _tooDeep = true;
-                    _diagnostics.ReportNestingTooDeep(Current.Location);
-                    _position = _tokens.Length - 1;
-                }
+                RefuseTooDeep();
                 return instead();
             }
             finally
             {
                 _depth--;
             }
+        }
+
+        private void RefuseTooDeep()
+        {
+            if (_tooDeep) return;
+            _tooDeep = true;
+            _diagnostics.ReportNestingTooDeep(Current.Location);
+            _position = _tokens.Length - 1;
         }
 
         public CompilationUnitSyntax ParseCompilationUnit()
@@ -393,11 +396,19 @@ namespace Trillium.Syntax
                 left = ParsePrimaryExpression();
             }
 
+            // a + b + c is (a + b) + c: the loop builds a tree one level deeper per operator without recursing, so each
+            // operator counts toward the depth as a nested call would.
+            var chained = 0;
             while (true)
             {
                 var precedence = Current.Kind.GetBinaryOperatorPrecedence();
                 if (precedence == 0 || precedence <= parentPrecedence)
                     break;
+                if (_depth + ++chained > SyntaxTree.MaxNestingDepth)
+                {
+                    RefuseTooDeep();
+                    break;
+                }
 
                 var operatorToken = NextToken();
                 var right = ParseBinaryExpression(precedence);

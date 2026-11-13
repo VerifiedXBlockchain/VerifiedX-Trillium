@@ -35,6 +35,10 @@ namespace Trillium.Test.Syntax
             { "if statements", Repeat("if true ", 100_000) + "a = 1" },
             { "else-if chain", "if true { }" + Repeat(" else if true { }", 100_000) },
             { "binary right operands", Repeat("a + -(", 100_000) },
+            // a + b + c is (a + b) + c: each operator in a chain is one level deeper, though the parser loops over them.
+            { "operator chain", "1" + Repeat("+1", 32_000) },
+            { "operator chain with a syntax error after it", "1" + Repeat("+1", 32_000) + "@" },
+            { "mixed operator chain", "1" + Repeat("*1+1", 16_000) },
         };
 
         [Theory]
@@ -56,11 +60,23 @@ namespace Trillium.Test.Syntax
         {
             var parens = Repeat("(", 100) + "1" + Repeat(")", 100);
             var elseIfs = "if a == 0 { b = 0 }" + string.Concat(Enumerable.Range(1, 50).Select(i => $" else if a == {i} {{ b = {i} }}"));
-            foreach (var text in new[] { $"var a = {parens}", $"var a = 1\nvar b = 0\n{elseIfs}" })
+            var chain = "1" + Repeat(" + 1", 200);
+            foreach (var text in new[] { $"var a = {parens}", $"var a = 1\nvar b = 0\n{elseIfs}", $"var a = {chain}" })
             {
                 var tree = ParseOnOneMegabyteStack(text);
                 Assert.Empty(tree.Diagnostics);
             }
+        }
+
+        [Fact]
+        public void Descendants_VisitEveryNodeInSourceOrder()
+        {
+            var tree = SyntaxTree.Parse("function F(a : int) : int { var b = a * 2 + 1 if b > 3 { return b } return -a }\nvar c = F(1) + F(2)");
+            Assert.Empty(tree.Diagnostics);
+            var expected = new System.Collections.Generic.List<SyntaxNode>();
+            void Walk(SyntaxNode node) { expected.Add(node); foreach (var child in node.GetChildren()) Walk(child); }
+            Walk(tree.Root);
+            Assert.Equal(expected, TrilliumTest.Extensions.SyntaxNodeExtensions.Descendants(tree.Root).ToList());
         }
     }
 }
