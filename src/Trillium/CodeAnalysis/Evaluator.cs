@@ -306,6 +306,9 @@ namespace Trillium.CodeAnalysis
                     }
                 }
 
+                // In one order on every node: the function table iterates in the order of its symbols' hashes, which
+                // .NET seeds afresh in every process, so the same contract listed its methods differently node to node.
+                methodStringList.Sort(StringComparer.Ordinal);
                 methodList.AppendJoin(',', methodStringList);
                 output = methodList.ToString();
 
