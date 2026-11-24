@@ -20,5 +20,14 @@ namespace Trillium.CodeAnalysis
 
         internal static EvaluationLimitException TooManyCalls() =>
             new EvaluationLimitException($"Code makes more than {MaxCalls} function calls.");
+
+        internal static EvaluationLimitException TooManySteps(long limit) =>
+            new EvaluationLimitException($"Code runs more than {limit} steps.");
+
+        internal static EvaluationLimitException StringTooLong(int limit) =>
+            new EvaluationLimitException($"Code makes a string longer than {limit} characters.");
+
+        internal static EvaluationLimitException TooMuchText(long limit) =>
+            new EvaluationLimitException($"Code works through more than {limit} characters of text.");
     }
 }

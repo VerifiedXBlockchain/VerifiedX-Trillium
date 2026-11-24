@@ -17,9 +17,16 @@ namespace Trillium.CodeAnalysis
         private object _lastValue;
         private int _depth;
         private long _calls;
+        private readonly EvaluationLimits _limits;
+        private long _steps;
+        private long _textWork;
 
-        public Evaluator(BoundProgram program, Dictionary<VariableSymbol, object> variables)
+        public long Steps => _steps;
+        public long TextWork => _textWork;
+
+        public Evaluator(BoundProgram program, Dictionary<VariableSymbol, object> variables, EvaluationLimits limits)
         {
+            _limits = limits;
             _program = program;
             _globals = variables;
             _locals.Push(new Dictionary<VariableSymbol, object>());
@@ -62,6 +69,7 @@ namespace Trillium.CodeAnalysis
 
             while (index < body.Statements.Length)
             {
+                Step();
                 var s = body.Statements[index];
 
                 switch (s.Kind)
@@ -122,6 +130,7 @@ namespace Trillium.CodeAnalysis
             {
                 if (++_depth > EvaluationLimitException.MaxDepth)
                     throw EvaluationLimitException.TooDeep();
+                Step();
                 switch (node.Kind)
                 {
                     case BoundNodeKind.LiteralExpression:
@@ -200,7 +209,13 @@ namespace Trillium.CodeAnalysis
                     if (b.Type == TypeSymbol.Int)
                         return (int)left + (int)right;
                     else
-                        return (string)left + (string)right;
+                    {
+                        // The length is checked before the string is made.
+                        var l = (string)left;
+                        var r = (string)right;
+                        Made((long)(l?.Length ?? 0) + (r?.Length ?? 0));
+                        return l + r;
+                    }
                 case BoundBinaryOperatorKind.Subtraction:
                     return (int)left - (int)right;
                 case BoundBinaryOperatorKind.Multiplication:
@@ -227,8 +242,10 @@ namespace Trillium.CodeAnalysis
                 case BoundBinaryOperatorKind.LogicalOr:
                     return (bool)left || (bool)right;
                 case BoundBinaryOperatorKind.Equals:
+                    Compared(left, right);
                     return Equals(left, right);
                 case BoundBinaryOperatorKind.NotEquals:
+                    Compared(left, right);
                     return !Equals(left, right);
                 case BoundBinaryOperatorKind.Less:
                     return (int)left < (int)right;
@@ -252,6 +269,7 @@ namespace Trillium.CodeAnalysis
             else if (node.Function == BuiltinFunctions.Print)
             {
                 var message = (string)EvaluateExpression(node.Arguments[0]);
+                Read(message);
                 Console.WriteLine(message);
                 return null;
             }
@@ -267,6 +285,7 @@ namespace Trillium.CodeAnalysis
             {
                 Dictionary<string, string[]> messageDict = new Dictionary<string, string[]>();
                 var message = (string)EvaluateExpression(node.Arguments[0]);
+                Read(message);
                 if(message != "" && message != null)
                 {
                     var messageArray = message.Split(new string[] { "|->" }, StringSplitOptions.None);
@@ -279,6 +298,7 @@ namespace Trillium.CodeAnalysis
             else if(node.Function == BuiltinFunctions.DateProcess)
             {
                 var message = (string)EvaluateExpression(node.Arguments[0]);
+                Read(message);
                 long dateTickers = Convert.ToInt64(message);
                 DateTime myDate = new DateTime(dateTickers);
                 //Console.WriteLine(message + " Date: " + myDate.ToString());
@@ -309,6 +329,7 @@ namespace Trillium.CodeAnalysis
                 // In one order on every node: the function table iterates in the order of its symbols' hashes, which
                 // .NET seeds afresh in every process, so the same contract listed its methods differently node to node.
                 methodStringList.Sort(StringComparer.Ordinal);
+                Made(methodStringList.Sum(m => (long)m.Length + 1));
                 methodList.AppendJoin(',', methodStringList);
                 output = methodList.ToString();
 
@@ -318,6 +339,8 @@ namespace Trillium.CodeAnalysis
             {
                 var message = (string)EvaluateExpression(node.Arguments[0]);
                 var privateKey = (string)EvaluateExpression(node.Arguments[1]);
+                Read(message);
+                Read(privateKey);
 
                 var signature = CreateSignatureUtility.CreateSignature(message, privateKey);
 
@@ -328,6 +351,9 @@ namespace Trillium.CodeAnalysis
                 var message = (string)EvaluateExpression(node.Arguments[0]);
                 var address = (string)EvaluateExpression(node.Arguments[1]);
                 var sigScript = (string)EvaluateExpression(node.Arguments[2]);
+                Read(message);
+                Read(address);
+                Read(sigScript);
 
                 var result = ValidateSignatureUtility.VerifySignature(address, message, sigScript);
 
@@ -336,6 +362,7 @@ namespace Trillium.CodeAnalysis
             else if (node.Function == BuiltinFunctions.GetSCProperties)
             {
                 var propertyList = (string)EvaluateExpression(node.Arguments[0]);
+                Read(propertyList);
 
                 var map = propertyList.Split(new string[] { "<|>" }, StringSplitOptions.None)
                     .Select(p => p.Trim().Split(':'))
@@ -421,14 +448,52 @@ namespace Trillium.CodeAnalysis
             var value = EvaluateExpression(node.Expression);
             if (node.Type == TypeSymbol.Any)
                 return value;
-            else if (node.Type == TypeSymbol.Bool)
+            if (value is string text)
+                Read(text); // a conversion from text reads all of it
+            if (node.Type == TypeSymbol.Bool)
                 return Convert.ToBoolean(value);
             else if (node.Type == TypeSymbol.Int)
                 return Convert.ToInt32(value);
             else if (node.Type == TypeSymbol.String)
-                return Convert.ToString(value);
+            {
+                if (value is string same)
+                    return same;
+                var converted = Convert.ToString(value);
+                Made(converted?.Length ?? 0);
+                return converted;
+            }
             else
                 throw new Exception($"Unexpected type {node.Type}");
+        }
+
+        private void Step()
+        {
+            if (++_steps > _limits.MaxSteps)
+                throw EvaluationLimitException.TooManySteps(_limits.MaxSteps);
+        }
+
+        /// <summary>A string of <paramref name="length"/> characters is about to be made.</summary>
+        private void Made(long length)
+        {
+            if (length > _limits.MaxStringLength)
+                throw EvaluationLimitException.StringTooLong(_limits.MaxStringLength);
+            Work(length);
+        }
+
+        private void Read(string text) => Work(text?.Length ?? 0);
+
+        /// <summary>Two values are compared: two strings are read as far as the shorter one.</summary>
+        private void Compared(object left, object right)
+        {
+            if (left is string l && right is string r)
+                Work(Math.Min(l.Length, r.Length));
+        }
+
+        private void Work(long characters)
+        {
+            _textWork += characters;
+            if (_textWork > _limits.MaxTextWork)
+                throw EvaluationLimitException.TooMuchText(_limits.MaxTextWork);
         }
 
         private void Assign(VariableSymbol variable, object value)

@@ -89,8 +89,12 @@ namespace Trillium.CodeAnalysis
             return Binder.BindProgram(IsScript, previous, GlobalScope);
         }
 
-        public EvaluationResult Evaluate(Dictionary<VariableSymbol, object> variables)
+        public EvaluationResult Evaluate(Dictionary<VariableSymbol, object> variables) => Evaluate(variables, EvaluationLimits.Default);
+
+        /// <summary>Runs the program within <paramref name="limits"/>; over one it stops with <see cref="EvaluationLimitException"/>.</summary>
+        public EvaluationResult Evaluate(Dictionary<VariableSymbol, object> variables, EvaluationLimits limits)
         {
+            if (limits == null) throw new ArgumentNullException(nameof(limits));
             var parseDiagnostics = SyntaxTrees.SelectMany(st => st.Diagnostics);
 
             var diagnostics = parseDiagnostics.Concat(GlobalScope.Diagnostics).ToImmutableArray();
@@ -112,9 +116,9 @@ namespace Trillium.CodeAnalysis
             if (program.Diagnostics.Any())
                 return new EvaluationResult(program.Diagnostics.ToImmutableArray(), null);
 
-            var evaluator = new Evaluator(program, variables);
+            var evaluator = new Evaluator(program, variables, limits);
             var value = evaluator.Evaluate();
-            return new EvaluationResult(ImmutableArray<Diagnostic>.Empty, value);
+            return new EvaluationResult(ImmutableArray<Diagnostic>.Empty, value) { Steps = evaluator.Steps, TextWork = evaluator.TextWork };
         }
 
         public void EmitTree(TextWriter writer)
